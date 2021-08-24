@@ -5,6 +5,7 @@ const jsesc = require("jsesc");
 const globParent = require("glob-parent");
 const validateOptions = require("schema-utils");
 const lodashTemplate = require('lodash.template');
+const webpack = require("webpack");
 
 const schema = {
     "type": "object",
@@ -82,26 +83,30 @@ class AngularTemplateCacheWebpackPlugin {
 
     apply(compiler) {
 
-        compiler.hooks.thisCompilation.tap('AngularTemplateCacheWebpackPlugin', (compilation) => {
-            compilation.hooks.additionalAssets.tapAsync('AngularTemplateCacheWebpackPlugin', (callback) => {
+        compiler.hooks.compilation.tap('AngularTemplateCacheWebpackPlugin', (compilation) => {
+            compilation.hooks.processAssets.tap(
+                {
+                    name: 'AngularTemplateCacheWebpackPlugin', 
+                    stage: webpack.Compilation.PROCESS_ASSETS_STAGE_DERIVED
+                }, (callback) => {
                 let cachedTemplates = '';
 
                 this.templatelist.forEach((template) => {
                     cachedTemplates += template + '\n';
                 });
 
-                // Insert this list into the webpack build as a new file asset:
-                compilation.assets[this.options.outputFilename] = {
-                    source: function () {
-                        return cachedTemplates;
-                    },
-                    size: function () {
-                        return cachedTemplates.length;
-                    },
-
-                };
-
-                callback();
+                if(typeof compilation.getAsset(this.options.outputFilename) !== "undefined") {
+                    compilation.updateAsset(
+                        this.options.outputFilename,
+                        new webpack.sources.RawSource(cachedTemplates)
+                    )
+                } else {
+                    compilation.emitAsset(
+                        this.options.outputFilename,
+                        new webpack.sources.RawSource(cachedTemplates)
+                    );
+                }
+                
             });
 
         });
